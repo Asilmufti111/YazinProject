@@ -1,5 +1,5 @@
 // src/App.tsx
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
   BrowserRouter as Router,
   Routes,
@@ -15,6 +15,7 @@ import { PatientDashboard } from './components/dashboard/PatientDashboard';
 import PatientSearchPage from './components/pages/PatientSearchPage';
 
 import type { User, Patient } from './types';
+import { useAuth } from './hooks/useAuth';
 
 // ⛳ Login Wrapper Component
 const LoginFormWrapper: React.FC<{ setUser: React.Dispatch<React.SetStateAction<User | null>> }> = ({ setUser }) => {
@@ -47,12 +48,12 @@ const LoginFormWrapper: React.FC<{ setUser: React.Dispatch<React.SetStateAction<
   return <LoginForm onLogin={handleLogin} />;
 };
 
-// ⛳ Dashboard Layout (fetches patient and renders dashboard)
+// ⛳ Dashboard Layout
 const DashboardLayout: React.FC = () => {
   const { patientId } = useParams<{ patientId: string }>();
-  const [patient, setPatient] = useState<Patient | null>(null);
+  const [patient, setPatient] = React.useState<Patient | null>(null);
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (!patientId) return;
 
     const fetchPatient = async () => {
@@ -83,7 +84,7 @@ const DashboardLayout: React.FC = () => {
           medications: [],
           medicationHistory: [],
           suspendedMedications: [],
-          // chiefComplaint: null,
+          diagnoses: []
         };
 
         setPatient(p);
@@ -98,36 +99,16 @@ const DashboardLayout: React.FC = () => {
   return <PatientDashboard patient={patient} />;
 };
 
-// ⛳ Main App Component
+// ⛳ Main App
 const App: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null);
-
-  useEffect(() => {
-    const restore = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (data.session?.user) {
-        const u = data.session.user;
-        setUser({ id: u.id, email: u.email! });
-      }
-    };
-    restore();
-  }, []);
+  const { user, setUser } = useAuth();
 
   return (
     <Router>
       <Routes>
-        <Route
-          path="/"
-          element={ <LoginFormWrapper setUser={setUser} />}
-        />
-        <Route
-          path="/search"
-          element={user ? <PatientSearchPage /> : <Navigate to="/" />}
-        />
-        <Route
-          path="/dashboard/:patientId"
-          element={user ? <DashboardLayout /> : <Navigate to="/" />}
-        />
+        <Route path="/" element={<LoginFormWrapper setUser={setUser} />} />
+        <Route path="/search" element={user ? <PatientSearchPage /> : <Navigate to="/" />} />
+        <Route path="/dashboard/:patientId" element={user ? <DashboardLayout /> : <Navigate to="/" />} />
       </Routes>
     </Router>
   );
