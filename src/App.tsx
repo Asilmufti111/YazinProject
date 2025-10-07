@@ -4,87 +4,103 @@ import { Routes, Route, Navigate, useNavigate, useParams } from "react-router-do
 
 import { supabase } from "./lib/supabaseClient";
 import Header from "./components/Header";
-import { LoginForm } from "./components/auth/LoginForm";
-import { SignupForm, type SignupPayload } from "./components/auth/SignupForm"; // NEW: import SignupForm
+import LoginForm, { type LoginFormValues } from "./components/auth/LoginForm";
+import SignupForm, { type SignupFormValues } from  "./components/auth/SignupForm";
 import PatientSearchPage from "./components/pages/PatientSearchPage";
 import { PatientDashboard } from "./components/dashboard/PatientDashboard";
 
 import { useAuth } from "./hooks/useAuth";
 import type { User, Patient } from "./types";
 
-/* =========================
-   Login wrapper (handles Supabase auth)
-   ========================= */
+/* Login wrapper */
 const LoginFormWrapper: React.FC<{ setUser: React.Dispatch<React.SetStateAction<User | null>> }> = ({ setUser }) => {
   const navigate = useNavigate();
 
-  const handleLogin = async ({
-    email,
-    password,
-    hospital, // CHANGED: accept hospital because LoginForm sends it
-  }: {
-    email: string;
-    password: string;
-    hospital: string;
-  }) => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      alert("Login failed: " + error.message);
+const handleLogin = async ({nationalId, email, password }: LoginFormValues) => {
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) {
+    alert("Login failed: " + error.message);
+    return;
+  }
+
+  const u = data.user!;
+  // Look up the profile row — this is the “login based on users table” check
+  const { data: profile, error: profErr } = await supabase
+    .from("users")
+    .select("id, name, role, hospital, national_id")
+    .eq("id", u.id) // or .eq("auth_user_id", u.id) if that’s your schema
+    .maybeSingle();
+
+  if (profErr) {
+    alert(`Could not read profile: ${profErr.message}`);
+    await supabase.auth.signOut();
+    return;
+  }
+
+  if (!profile) {
+    // No row in public.users → treat as invalid login for your app
+    alert("No profile found in the users table. Contact support or sign up again.");
+    await supabase.auth.signOut();
+    return;
+  }
+if (!profile.national_id || profile.national_id !== nationalId) {
+      alert("National ID does not match this account.");
+      await supabase.auth.signOut();
       return;
     }
 
-    const u = data.user!;
-    // Optional: verify hospital membership here (profiles/hospitals check)
+  // OK: trust DB values
+  setUser({
+    id: u.id,
+    email: u.email!,
+    name: profile.name || "",
+    // role: profile.role, // if your User type has it
+  });
 
-    setUser({
-      id: u.id,
-      email: u.email!,
-      name: (u.user_metadata?.full_name as string) || (u.user_metadata?.name as string) || "",
-    }); // CHANGED: set name for header display
-    navigate("/search");
-  };
-
-  return <LoginForm onLogin={handleLogin} />;
+  navigate("/search");
 };
 
-/* =========================
-   Signup wrapper (same pattern as login)
-   ========================= */
+  return <LoginForm onSubmit={handleLogin} />;   // ← onSubmit (not onLogin)
+};
+
+
+/* Signup wrapper */
 const SignupWrapper: React.FC<{ setUser: React.Dispatch<React.SetStateAction<User | null>> }> = ({ setUser }) => {
   const navigate = useNavigate();
 
-  const onSignup = async ({ name, email, password, role, hospitalCode }: SignupPayload) => {
-    // 1) Create auth user (store display name in metadata)
-    const { data: su, error: signUpErr } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { full_name: name, role } },
-    });
-    if (signUpErr) {
-      alert(signUpErr.message);
-      return;
-    }
+  // --- inside SignupWrapper ---
+const onSignup = async ({ name, email, password, role, hospitalName, nationalId }: SignupFormValues) => {
+  // 1) Create auth user and send metadata for the trigger
+  const { error: signUpErr } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      // 👇 keys must match what your trigger expects
+      data: {
+        full_name: name,
+        role,                         // e.g. "doctor" | "pharmacist" | ...
+        hospital: hospitalName,       // your column is `hospital`
+        national_id: nationalId,      // your column is `national_id`
+      },
+      // optional, if you use email confirmations:
+      // emailRedirectTo: window.location.origin,
+    },
+  });
 
-    // 2) Optional: map hospitalCode -> hospital_id, upsert profiles row here
+  if (signUpErr) {
+    alert(signUpErr.message);
+    return;
+  }
 
-    // 3) Auto-login (works if email confirmation is OFF)
-    const { data: li, error: loginErr } = await supabase.auth.signInWithPassword({ email, password });
-    if (loginErr) {
-      alert("Sign-up succeeded. Please verify your email, then sign in.");
-      return;
-    }
-
-    const u = li.user!;
-    setUser({
-      id: u.id,
-      email: u.email!,
-      name: (u.user_metadata?.full_name as string) || name,
-    }); // CHANGED: set name so header shows user name
-    navigate("/search");
-  };
-
-  return <SignupForm onSignup={onSignup} />;
+  // 2) No client-side insert. The trigger will insert into public.users.
+  // 3) Send user to the Login page
+  navigate("/");                      // <- go to login after creating account
 };
+
+  return <SignupForm onSubmit={onSignup} />;
+};
+
+   
 
 /* =========================
    Dashboard loader
@@ -95,18 +111,16 @@ const DashboardLayout: React.FC = () => {
 
   React.useEffect(() => {
     if (!patientId) return;
-
     (async () => {
       const { data, error } = await supabase.from("patients").select("*").eq("id", patientId).single();
       if (error || !data) return;
-
       const p: Patient = {
         id: data.id,
         name: data.name,
         date_of_birth: data.date_of_birth,
         bloodType: data.blood_type,
         allergies: [],
-        diagnoses: [], // CHANGED: keep diagnoses array as in your types
+        diagnoses: [],
         vitalSigns: { temperature: 0, bloodPressure: "", heartRate: 0, oxygenSaturation: 0 },
         medications: [],
         medicationHistory: [],
@@ -121,12 +135,11 @@ const DashboardLayout: React.FC = () => {
 };
 
 /* =========================
-   App (no BrowserRouter here)
+   App
    ========================= */
 export default function App() {
   const { user, setUser } = useAuth();
 
-  // CHANGED: logout for header
   const logout = async () => {
     await supabase.auth.signOut();
     setUser(null);
@@ -134,16 +147,13 @@ export default function App() {
 
   return (
     <>
-      {/* CHANGED: header shows logo + user name + logout */}
       <Header user={user} onLogout={logout} />
-
-      {/* Routes only; BrowserRouter must be in src/main.tsx */}
       <Routes>
         <Route path="/" element={<LoginFormWrapper setUser={setUser} />} />
-        <Route path="/signup" element={<SignupWrapper setUser={setUser} />} /> {/* NEW: signup route */}
+        <Route path="/signup" element={<SignupWrapper setUser={setUser} />} />
         <Route path="/search" element={user ? <PatientSearchPage /> : <Navigate to="/" replace />} />
         <Route path="/dashboard/:patientId" element={user ? <DashboardLayout /> : <Navigate to="/" replace />} />
-        <Route path="*" element={<Navigate to="/" replace />} /> {/* NEW: catch-all to avoid blank pages */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>
   );

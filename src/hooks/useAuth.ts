@@ -1,26 +1,25 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState, type PropsWithChildren } from "react";
 import { supabase } from '../lib/supabaseClient';
 import type { User } from '../types';
 
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
-
   useEffect(() => {
-    const restore = async () => {
+    (async () => {
       const { data } = await supabase.auth.getSession();
-      const sessionUser = data.session?.user;
-
-      if (sessionUser) {
-        setUser({
-          id: sessionUser.id,
-          email: sessionUser.email!,
-          name: sessionUser.user_metadata?.name || '',
-        });
-      }
-    };
-
-    restore();
+      const u = data.session?.user;
+      if (u) setUser({ id: u.id, email: u.email!, name: (u.user_metadata?.name as string) || "" });
+    })();
   }, []);
-
   return { user, setUser };
 };
+
+// No-JSX provider so this compiles in .ts files
+export function AuthProvider({ children }: PropsWithChildren<{}>) {
+  return React.createElement(React.Fragment, null, children);
+}
+
+
+
+
+

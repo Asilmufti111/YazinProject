@@ -1,21 +1,37 @@
-// src/components/auth/LoginForm.tsx
+// /src/components/auth/LoginForm.tsx
+// Styled login form: asks for National ID + Email + Password.
+// CHANGED: Added National ID field and included it in the onSubmit payload.
+// CHANGED: Kept Tailwind layout so it looks good.
+
 import React, { useState } from "react";
-import { Lock, Mail, Guitar as Hospital } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import { Lock, Mail, IdCard } from "lucide-react";
 
-interface LoginFormProps {
-  onLogin: (c: { email: string; password: string; hospital: string }) => void;
-}
+export type LoginFormValues = {
+  nationalId: string; // CHANGED
+  email: string;
+  password: string;
+};
 
-export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
+export default function LoginForm(props: {
+  onSubmit: (v: LoginFormValues) => void | Promise<void>;
+}) {
+  const { onSubmit } = props;
+
+  const [nationalId, setNationalId] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [hospital, setHospital] = useState("");
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onLogin({ email, password, hospital });
+    setLoading(true);
+    try {
+      await onSubmit({ nationalId, email, password }); // CHANGED
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -27,19 +43,24 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Hospital */}
+          {/* National ID */}
           <div>
-            <label className="block text-sm font-medium text-gray-700">Hospital ID</label>
+            <label className="block text-sm font-medium text-gray-700">
+              National ID
+            </label>
             <div className="mt-1 relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Hospital className="h-5 w-5 text-gray-400" />
+                <IdCard className="h-5 w-5 text-gray-400" />
               </div>
               <input
-                type="text"
-                value={hospital}
-                onChange={(e) => setHospital(e.target.value)}
-                className="pl-10 block w-full rounded-lg border-gray-300 bg-gray-50 focus:ring-indigo-500 focus:border-indigo-500 uppercase"
-                placeholder="e.g., KFHJ"
+                inputMode="numeric"
+                pattern="\d{10}"          // optional: 10 digits
+                minLength={10}
+                maxLength={10}
+                value={nationalId}
+                onChange={(e) => setNationalId(e.target.value)}
+                className="pl-10 block w-full rounded-lg border-gray-300 bg-gray-50 focus:ring-indigo-500 focus:border-indigo-500"
+                placeholder="10-digit National ID"
                 required
               />
             </div>
@@ -47,7 +68,9 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
 
           {/* Email */}
           <div>
-            <label className="block text-sm font-medium text-gray-700">Email</label>
+            <label className="block text-sm font-medium text-gray-700">
+              Email
+            </label>
             <div className="mt-1 relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Mail className="h-5 w-5 text-gray-400" />
@@ -57,7 +80,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="pl-10 block w-full rounded-lg border-gray-300 bg-gray-50 focus:ring-indigo-500 focus:border-indigo-500"
-                placeholder="Enter your email"
+                placeholder="you@example.com"
                 autoComplete="email"
                 required
               />
@@ -66,7 +89,9 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
 
           {/* Password */}
           <div>
-            <label className="block text-sm font-medium text-gray-700">Password</label>
+            <label className="block text-sm font-medium text-gray-700">
+              Password
+            </label>
             <div className="mt-1 relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Lock className="h-5 w-5 text-gray-400" />
@@ -76,7 +101,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="pl-10 block w-full rounded-lg border-gray-300 bg-gray-50 focus:ring-indigo-500 focus:border-indigo-500"
-                placeholder="Enter your password"
+                placeholder="••••••••"
                 autoComplete="current-password"
                 required
               />
@@ -87,12 +112,12 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
           <div className="space-y-3">
             <button
               type="submit"
-              className="w-full py-3 rounded-lg shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              disabled={loading}
+              className="w-full py-3 rounded-lg shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-60"
             >
-              Sign in
+              {loading ? "Signing in..." : "Sign in"}
             </button>
 
-            {/* Sign up as a full-width secondary button */}
             <button
               type="button"
               onClick={() => navigate("/signup")}
@@ -101,16 +126,8 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
               Create an account
             </button>
           </div>
-
-          {/* Optional: keep text link too */}
-          {/* <div className="text-center text-sm text-gray-600">
-            Don’t have an account?{" "}
-            <Link to="/signup" className="text-indigo-600 hover:text-indigo-700 font-medium">
-              Sign up
-            </Link>
-          </div> */}
         </form>
       </div>
     </div>
   );
-};
+}
