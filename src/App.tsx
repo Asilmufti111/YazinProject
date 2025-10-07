@@ -1,6 +1,6 @@
 // src/App.tsx
 import React from "react";
-import { Routes, Route, Navigate, useNavigate, useParams } from "react-router-dom"; // CHANGED: no BrowserRouter here
+import { Routes, Route, Navigate, useNavigate, useParams } from "react-router-dom"; 
 
 import { supabase } from "./lib/supabaseClient";
 import Header from "./components/Header";
